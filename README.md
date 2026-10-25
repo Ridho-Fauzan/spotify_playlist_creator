@@ -105,6 +105,37 @@ Run `python create_playlist.py --help` for all options.
 
 ---
 
+## Deploy to Vercel ☁️
+
+This project is Vercel-ready (`api/index.py` + `vercel.json`).
+
+1. Push the repo to GitHub (already done) and **Import** it in
+   [Vercel](https://vercel.com/new).
+2. In the Vercel project, go to **Settings → Environment Variables** and
+   add these **three**:
+
+   | Name | Value |
+   |------|-------|
+   | `SPOTIFY_CLIENT_ID` | Your Client ID from the Spotify dashboard |
+   | `SPOTIFY_CLIENT_SECRET` | Your Client Secret |
+   | `SPOTIFY_REDIRECT_URI` | `https://YOUR-APP.vercel.app/callback` |
+   | `FLASK_SECRET_KEY` | Any long random string (keeps logins stable) |
+
+   > `FLASK_SECRET_KEY` is strongly recommended on Vercel — without a fixed
+   > value, the login cookie breaks between serverless invocations.
+3. In the **Spotify Developer Dashboard → your app → Settings**, add your
+   Vercel callback URL to **Redirect URIs** (must match exactly, HTTPS):
+   ```
+   https://YOUR-APP.vercel.app/callback
+   ```
+4. **Redeploy** so the env vars take effect, then open your Vercel URL. 🎉
+
+> Note: a new Spotify app is in **Development Mode** — only users you add
+> under **Settings → User Management** (up to 25) can log in until you
+> request a quota extension from Spotify.
+
+---
+
 ## Troubleshooting
 
 - **`INVALID_CLIENT: Invalid redirect URI`** — the redirect URI in `.env`
