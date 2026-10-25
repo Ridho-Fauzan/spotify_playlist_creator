@@ -90,7 +90,7 @@ class _VercelPathFix:
 app.wsgi_app = _VercelPathFix(app.wsgi_app)
 
 
-def make_oauth(cache_handler=None):
+def make_oauth(cache=None):
     """Build a SpotifyOAuth helper from environment config."""
     client_id = os.getenv("SPOTIFY_CLIENT_ID")
     client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
@@ -107,20 +107,30 @@ def make_oauth(cache_handler=None):
         client_secret=client_secret,
         redirect_uri=redirect_uri,
         scope=SCOPE,
-        cache_handler=cache_handler,
+        cache_handler=cache,
         show_dialog=False,
+        # Belt-and-suspenders: if spotipy ever falls back to a file cache,
+        # point it at /tmp — the only writable directory on Vercel's
+        # read-only serverless filesystem. The session cache handler above
+        # is what we actually use; this just prevents a crash on import.
+        cache_path="/tmp/.spotipy_cache",
     )
 
 
-def cache_handler():
-    """Store the Spotify token inside the Flask session (per browser)."""
+def make_session_cache():
+    """Store the Spotify token inside the Flask session (per browser).
+
+    Using the session (a signed cookie) means no disk writes, which is
+    essential on serverless where the filesystem is read-only.
+    """
     return spotipy.cache_handler.FlaskSessionCacheHandler(session)
 
 
 def get_spotify():
     """Return an authenticated Spotify client, or None if not logged in."""
-    oauth = make_oauth(cache_handler())
-    token_info = oauth.validate_token(cache_handler().get_cached_token())
+    cache = make_session_cache()
+    oauth = make_oauth(cache)
+    token_info = oauth.validate_token(cache.get_cached_token())
     if not token_info:
         return None
     return spotipy.Spotify(auth=token_info["access_token"])
@@ -132,18 +142,18 @@ def get_spotify():
 
 @app.route("/login")
 def login():
-    oauth = make_oauth(cache_handler())
+    oauth = make_oauth(make_session_cache())
     return redirect(oauth.get_authorize_url())
 
 
 @app.route("/callback")
 def callback():
-    oauth = make_oauth(cache_handler())
+    oauth = make_oauth(make_session_cache())
     code = request.args.get("code")
     if not code:
         error = request.args.get("error", "kesalahan tidak diketahui")
         return f"Otorisasi gagal: {error}", 400
-    # Exchanging the code stores the token via the cache handler (session).
+    # Exchanging the code stores the token via the session cache handler.
     oauth.get_access_token(code, as_dict=False)
     return redirect(url_for("index"))
 
@@ -341,11 +351,36 @@ def handle_404(err):
     return send_from_directory(_PUBLIC_DIR, "index.html")
 
 
-@app.errorhandler(500)
-def handle_500(err):
+@app.errorhandler(Exception)
+def handle_exception(err):
+    """Catch-all so errors surface clearly instead of a bare 500 page.
+
+    We log the full traceback (visible in Vercel Runtime Logs) and return a
+    readable message. Set DEBUG_ERRORS=1 as a Vercel env var to include the
+    traceback in the HTTP response while diagnosing, then remove it.
+    """
+    import traceback
+
+    # Let Flask handle normal HTTP errors (404, redirects, etc.) as usual.
+    from werkzeug.exceptions import HTTPException
+
+    if isinstance(err, HTTPException):
+        return err
+
+    tb = traceback.format_exc()
+    app.logger.error("Unhandled error on %s:\n%s", request.path, tb)
+
+    show_tb = os.getenv("DEBUG_ERRORS") == "1"
     if request.path.startswith("/api/"):
-        return jsonify({"error": "Terjadi kesalahan di server."}), 500
-    return err
+        body = {"error": "Terjadi kesalahan di server."}
+        if show_tb:
+            body["traceback"] = tb
+        return jsonify(body), 500
+
+    message = "Terjadi kesalahan di server."
+    if show_tb:
+        message += "\n\n" + tb
+    return (message, 500, {"Content-Type": "text/plain; charset=utf-8"})
 
 
 if __name__ == "__main__":
