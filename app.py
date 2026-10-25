@@ -24,6 +24,7 @@ from flask import (
     jsonify,
     redirect,
     request,
+    send_from_directory,
     session,
     url_for,
 )
@@ -36,7 +37,12 @@ load_dotenv()
 # Scopes: permission to create/edit public and private playlists.
 SCOPE = "playlist-modify-public playlist-modify-private"
 
-app = Flask(__name__)
+# Resolve the static folder as an absolute path so it works regardless of
+# the process working directory (important on serverless hosts like Vercel).
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_STATIC_DIR = os.path.join(_BASE_DIR, "static")
+
+app = Flask(__name__, static_folder=_STATIC_DIR, static_url_path="/static")
 # Session secret just needs to be stable per-run for the login cookie.
 app.secret_key = os.getenv("FLASK_SECRET_KEY", uuid.uuid4().hex)
 
@@ -260,7 +266,8 @@ def api_create():
 
 @app.route("/")
 def index():
-    return app.send_static_file("index.html")
+    # Serve the single-page frontend from the static folder explicitly.
+    return send_from_directory(_STATIC_DIR, "index.html")
 
 
 if __name__ == "__main__":
