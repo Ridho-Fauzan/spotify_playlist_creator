@@ -288,6 +288,26 @@ def app_js():
     return send_from_directory(_PUBLIC_DIR, "app.js")
 
 
+# --------------------------------------------------------------------------
+# Error handlers — keep /api/* responses as JSON even on failure, so the
+# frontend never chokes on an HTML error page ("Unexpected token '<'").
+# --------------------------------------------------------------------------
+
+@app.errorhandler(404)
+def handle_404(err):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Endpoint tidak ditemukan.", "path": request.path}), 404
+    # For non-API routes, fall back to serving the single-page app.
+    return send_from_directory(_PUBLIC_DIR, "index.html")
+
+
+@app.errorhandler(500)
+def handle_500(err):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Terjadi kesalahan di server."}), 500
+    return err
+
+
 if __name__ == "__main__":
     # Port 8888 matches the default redirect URI in the setup instructions.
     app.run(host="127.0.0.1", port=8888, debug=True)
