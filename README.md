@@ -13,9 +13,9 @@ tracks or by using Spotify's recommendation engine.
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Flask web app (recommended) |
+| `app.py` | Flask web app — also the Vercel entry point |
 | `create_playlist.py` | Command-line version |
-| `static/` | Web app frontend (HTML/CSS/JS) |
+| `public/` | Frontend assets (served by Vercel's CDN) |
 | `.env.example` | Template for your Spotify credentials |
 | `songs.example.txt` | Sample song list for the CLI `--tracks-file` option |
 
@@ -107,7 +107,9 @@ Run `python create_playlist.py --help` for all options.
 
 ## Deploy to Vercel ☁️
 
-This project is Vercel-ready (`api/index.py` + `vercel.json`).
+This project is Vercel-ready with **zero config** — Vercel auto-detects the
+Flask `app` in `app.py`, and the assets in `public/` are served by its CDN.
+No `vercel.json` needed.
 
 1. Push the repo to GitHub (already done) and **Import** it in
    [Vercel](https://vercel.com/new).
