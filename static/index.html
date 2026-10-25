@@ -1,81 +1,81 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spotify Playlist Creator</title>
+  <title>Pembuat Playlist Spotify</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
   <div class="container">
     <header>
       <div class="logo">🎵</div>
-      <h1>Playlist Creator</h1>
-      <p class="subtitle">Build a Spotify playlist from your browser.</p>
+      <h1>Pembuat Playlist</h1>
+      <p class="subtitle">Bikin playlist Spotify langsung dari browser.</p>
     </header>
 
     <!-- Login state -->
     <section id="login-view" class="card hidden">
-      <p>Connect your Spotify account to get started.</p>
-      <a href="/login" class="btn btn-primary">Log in with Spotify</a>
+      <p>Hubungkan akun Spotify kamu untuk mulai.</p>
+      <a href="/login" class="btn btn-primary">Masuk dengan Spotify</a>
     </section>
 
     <!-- Main app -->
     <section id="app-view" class="hidden">
       <div class="userbar">
-        <span>Logged in as <strong id="user-name"></strong></span>
-        <a href="/logout" class="link">Log out</a>
+        <span>Masuk sebagai <strong id="user-name"></strong></span>
+        <a href="/logout" class="link">Keluar</a>
       </div>
 
       <form id="playlist-form" class="card">
         <label>
-          Playlist name <span class="req">*</span>
-          <input type="text" id="name" placeholder="My Awesome Mix" required />
+          Nama playlist <span class="req">*</span>
+          <input type="text" id="name" placeholder="Mix Keren Aku" required />
         </label>
 
         <label>
-          Description
-          <input type="text" id="description" placeholder="Optional" />
+          Deskripsi
+          <input type="text" id="description" placeholder="Opsional" />
         </label>
 
         <label class="checkbox">
           <input type="checkbox" id="public" />
-          Make this playlist public
+          Jadikan playlist ini publik
         </label>
 
         <hr />
 
-        <h3>Add songs</h3>
+        <h3>Tambah lagu</h3>
         <label>
-          One song per line — use <code>Title - Artist</code> for best results
+          Satu lagu per baris — pakai format <code>Judul - Artis</code> biar hasilnya paling akurat
           <textarea id="songs" rows="6"
-            placeholder="Bohemian Rhapsody - Queen&#10;Africa - Toto&#10;Mr. Brightside - The Killers"></textarea>
+            placeholder="Bohemian Rhapsody - Queen&#10;Hati-Hati di Jalan - Tulus&#10;Melukis Senja - Budi Doremi"></textarea>
         </label>
 
         <hr />
 
-        <h3>Or let Spotify recommend <span class="muted">(max 5 seeds total)</span></h3>
+        <h3>Atau biar Spotify yang rekomendasiin <span class="muted">(maks 5 seed total)</span></h3>
         <div class="grid">
           <label>
-            Seed artists <span class="muted">(comma-separated)</span>
-            <input type="text" id="seed_artists" placeholder="Bon Iver, Tulus" />
+            Artis acuan <span class="muted">(pisahkan dengan koma)</span>
+            <input type="text" id="seed_artists" placeholder="Tulus, Hindia" />
           </label>
           <label>
-            Seed genres <span class="muted">(comma-separated)</span>
+            Genre acuan <span class="muted">(pisahkan dengan koma)</span>
             <input type="text" id="seed_genres" placeholder="acoustic, pop" />
           </label>
           <label>
-            Seed tracks <span class="muted">(comma-separated)</span>
-            <input type="text" id="seed_tracks" placeholder="Holocene" />
+            Lagu acuan <span class="muted">(pisahkan dengan koma)</span>
+            <input type="text" id="seed_tracks" placeholder="Monokrom" />
           </label>
           <label>
-            How many to add
+            Jumlah lagu
             <input type="number" id="count" value="20" min="1" max="100" />
           </label>
         </div>
 
         <button type="submit" class="btn btn-primary" id="submit-btn">
-          Create playlist
+          Buat playlist
         </button>
       </form>
 
@@ -83,7 +83,7 @@
     </section>
 
     <footer>
-      <p class="muted">Runs locally · your credentials stay on your machine.</p>
+      <p class="muted">Kredensial kamu aman &amp; tidak disimpan di server.</p>
     </footer>
   </div>
 

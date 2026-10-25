@@ -98,8 +98,8 @@ def callback():
     oauth = make_oauth(cache_handler())
     code = request.args.get("code")
     if not code:
-        error = request.args.get("error", "unknown error")
-        return f"Authorization failed: {error}", 400
+        error = request.args.get("error", "kesalahan tidak diketahui")
+        return f"Otorisasi gagal: {error}", 400
     # Exchanging the code stores the token via the cache handler (session).
     oauth.get_access_token(code, as_dict=False)
     return redirect(url_for("index"))
@@ -171,7 +171,7 @@ def recommend_tracks(sp, seed_artists, seed_genres, seed_tracks, limit):
         return []
     if total > 5:
         raise ValueError(
-            "Spotify allows at most 5 seeds total (artists + genres + tracks)."
+            "Spotify hanya mengizinkan maksimal 5 acuan total (artis + genre + lagu)."
         )
 
     rec = sp.recommendations(
@@ -192,12 +192,12 @@ def add_in_batches(sp, playlist_id, uris):
 def api_create():
     sp = get_spotify()
     if not sp:
-        return jsonify({"error": "Not logged in."}), 401
+        return jsonify({"error": "Belum masuk/login."}), 401
 
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if not name:
-        return jsonify({"error": "Playlist name is required."}), 400
+        return jsonify({"error": "Nama playlist wajib diisi."}), 400
 
     description = (data.get("description") or "").strip()
     public = bool(data.get("public"))
@@ -221,7 +221,7 @@ def api_create():
 
     using_recs = bool(seed_artists or seed_genres or seed_tracks)
     if not queries and not using_recs:
-        return jsonify({"error": "Add some songs or recommendation seeds."}), 400
+        return jsonify({"error": "Tambahkan beberapa lagu atau acuan rekomendasi."}), 400
 
     uris, not_found = [], []
     if queries:
@@ -245,7 +245,7 @@ def api_create():
             unique.append(u)
 
     if not unique:
-        return jsonify({"error": "No tracks could be found.", "not_found": not_found}), 400
+        return jsonify({"error": "Tidak ada lagu yang bisa ditemukan.", "not_found": not_found}), 400
 
     user_id = sp.current_user()["id"]
     playlist = sp.user_playlist_create(

@@ -1,4 +1,4 @@
-// Frontend logic for the Spotify Playlist Creator web app.
+// Logika frontend untuk web app Pembuat Playlist Spotify.
 
 const loginView = document.getElementById("login-view");
 const appView = document.getElementById("app-view");
@@ -7,7 +7,7 @@ const form = document.getElementById("playlist-form");
 const submitBtn = document.getElementById("submit-btn");
 const result = document.getElementById("result");
 
-// Check whether the user is already logged in, and show the right view.
+// Cek apakah user sudah login, lalu tampilkan tampilan yang sesuai.
 async function checkAuth() {
   try {
     const res = await fetch("/api/me");
@@ -47,7 +47,7 @@ form.addEventListener("submit", async (e) => {
   };
 
   submitBtn.disabled = true;
-  submitBtn.textContent = "Creating...";
+  submitBtn.textContent = "Membuat...";
   result.classList.add("hidden");
 
   try {
@@ -59,22 +59,27 @@ form.addEventListener("submit", async (e) => {
     const data = await res.json();
 
     if (res.ok && data.ok) {
-      let html = `✅ <strong>Created "${data.name}"</strong> with ${data.added} track(s).<br />`;
-      html += `<a href="${data.url}" target="_blank" rel="noopener">Open in Spotify →</a>`;
+      let html = `✅ <strong>Berhasil membuat "${escapeHtml(
+        data.name
+      )}"</strong> dengan ${data.added} lagu.<br />`;
+      html += `<a href="${data.url}" target="_blank" rel="noopener">Buka di Spotify →</a>`;
       if (data.not_found && data.not_found.length) {
-        html += `<p class="muted">Couldn't find: ${data.not_found
+        html += `<p class="muted">Tidak ditemukan: ${data.not_found
           .map((s) => escapeHtml(s))
           .join(", ")}</p>`;
       }
       showResult(html, "success");
     } else {
-      showResult("⚠️ " + escapeHtml(data.error || "Something went wrong."), "error");
+      showResult(
+        "⚠️ " + escapeHtml(data.error || "Terjadi kesalahan."),
+        "error"
+      );
     }
   } catch (err) {
-    showResult("⚠️ Network error: " + escapeHtml(err.message), "error");
+    showResult("⚠️ Gagal terhubung: " + escapeHtml(err.message), "error");
   } finally {
     submitBtn.disabled = false;
-    submitBtn.textContent = "Create playlist";
+    submitBtn.textContent = "Buat playlist";
   }
 });
 
