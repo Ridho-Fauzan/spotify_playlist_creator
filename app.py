@@ -37,13 +37,15 @@ load_dotenv()
 # Scopes: permission to create/edit public and private playlists.
 SCOPE = "playlist-modify-public playlist-modify-private"
 
-# Resolve the static folder as an absolute path so it works regardless of
-# the process working directory (important on serverless hosts like Vercel).
+# Frontend assets live in public/ so Vercel's CDN serves style.css and
+# app.js directly. Flask only needs to serve index.html at the root route.
+# Paths are absolute so they resolve regardless of working directory.
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-_STATIC_DIR = os.path.join(_BASE_DIR, "static")
+_PUBLIC_DIR = os.path.join(_BASE_DIR, "public")
 
-app = Flask(__name__, static_folder=_STATIC_DIR, static_url_path="/static")
+app = Flask(__name__)
 # Session secret just needs to be stable per-run for the login cookie.
+# On serverless (Vercel), set FLASK_SECRET_KEY so logins survive restarts.
 app.secret_key = os.getenv("FLASK_SECRET_KEY", uuid.uuid4().hex)
 
 
@@ -266,8 +268,18 @@ def api_create():
 
 @app.route("/")
 def index():
-    # Serve the single-page frontend from the static folder explicitly.
-    return send_from_directory(_STATIC_DIR, "index.html")
+    # Serve the single-page frontend. On Vercel, style.css/app.js are served
+    # directly by the CDN from public/; here we serve the HTML entry point.
+    return send_from_directory(_PUBLIC_DIR, "index.html")
+
+
+@app.route("/style.css")
+@app.route("/app.js")
+def public_asset():
+    # Fallback for local dev (`python app.py`). On Vercel these paths are
+    # served straight from the CDN and never reach Flask.
+    filename = request.path.lstrip("/")
+    return send_from_directory(_PUBLIC_DIR, filename)
 
 
 if __name__ == "__main__":
