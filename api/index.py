@@ -78,68 +78,11 @@ app.config.update(
 )
 
 
-class _VercelPathFix:
-    """WSGI middleware: restore the original request path on Vercel.
-
-    When vercel.json rewrites everything to the function file, some Vercel
-    configurations pass the function's own path (e.g. "/api/index" or
-    "/api/index.py") to the WSGI app instead of the URL the visitor typed
-    (e.g. "/login"). Vercel preserves the real URL in the
-    `x-forwarded-uri` / `x-vercel-*` headers, so we read it back and set
-    PATH_INFO accordingly. If the path already looks normal, we leave it
-    alone — so this is a no-op locally and harmless in every case.
-    """
-
-    _FUNCTION_PATHS = {"/api/index", "/api/index.py"}
-
-    def __init__(self, wsgi_app):
-        self.wsgi_app = wsgi_app
-
-    # Header names (WSGI-style, uppercased with HTTP_ prefix) that Vercel may
-    # use to carry the visitor's original URL+path.
-    _PATH_HEADERS = (
-        "HTTP_X_FORWARDED_URI",
-        "HTTP_X_VERCEL_FORWARDED_FOR_PATH",
-        "HTTP_X_ORIGINAL_URL",
-        "HTTP_X_NOW_ROUTE_MATCHES",
-        "HTTP_X_VERCEL_PROXIED_FOR",
-    )
-
-    def __call__(self, environ, start_response):
-        path = environ.get("PATH_INFO", "")
-        if path in self._FUNCTION_PATHS:
-            forwarded = ""
-            for header in self._PATH_HEADERS:
-                value = environ.get(header)
-                if value:
-                    forwarded = value
-                    break
-            if forwarded:
-                environ["PATH_INFO"] = forwarded.split("?", 1)[0]
-            else:
-                # Diagnostic: log every header so we can see what Vercel
-                # actually sends, then fall back to the query string's
-                # presence to guess the OAuth callback vs. home.
-                import logging
-
-                hdrs = {k: v for k, v in environ.items() if k.startswith("HTTP_")}
-                logging.getLogger("vercel-pathfix").warning(
-                    "PATH_INFO=%s, QUERY=%s, headers=%s",
-                    path,
-                    environ.get("QUERY_STRING", ""),
-                    hdrs,
-                )
-                # If there's an OAuth "code" in the query, this is the Spotify
-                # callback — route it to /callback so login completes.
-                qs = environ.get("QUERY_STRING", "")
-                if "code=" in qs or "error=" in qs:
-                    environ["PATH_INFO"] = "/callback"
-                else:
-                    environ["PATH_INFO"] = "/"
-        return self.wsgi_app(environ, start_response)
-
-
-app.wsgi_app = _VercelPathFix(app.wsgi_app)
+# Note: Vercel forwards the visitor's real request path (/, /login,
+# /callback, /api/*) straight to this WSGI app — confirmed in the runtime
+# logs where /login returned 302 and /callback completed the OAuth exchange.
+# We deliberately do NOT rewrite PATH_INFO: an earlier middleware that tried
+# to "fix" the path actually broke the login redirect, so it was removed.
 
 
 def make_oauth(cache=None):
