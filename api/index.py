@@ -50,6 +50,46 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", uuid.uuid4().hex)
 
 
+class _VercelPathFix:
+    """WSGI middleware: restore the original request path on Vercel.
+
+    When vercel.json rewrites everything to the function file, some Vercel
+    configurations pass the function's own path (e.g. "/api/index" or
+    "/api/index.py") to the WSGI app instead of the URL the visitor typed
+    (e.g. "/login"). Vercel preserves the real URL in the
+    `x-forwarded-uri` / `x-vercel-*` headers, so we read it back and set
+    PATH_INFO accordingly. If the path already looks normal, we leave it
+    alone — so this is a no-op locally and harmless in every case.
+    """
+
+    _FUNCTION_PATHS = {"/api/index", "/api/index.py"}
+
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        path = environ.get("PATH_INFO", "")
+        if path in self._FUNCTION_PATHS:
+            # Try the headers Vercel forwards with the original URL.
+            forwarded = (
+                environ.get("HTTP_X_FORWARDED_URI")
+                or environ.get("HTTP_X_VERCEL_FORWARDED_FOR_PATH")
+                or environ.get("HTTP_X_ORIGINAL_URL")
+                or ""
+            )
+            if forwarded:
+                # Strip any query string; Flask reads QUERY_STRING separately.
+                environ["PATH_INFO"] = forwarded.split("?", 1)[0]
+            else:
+                # No header available — default to the home page rather than
+                # a confusing 404 on the function's own path.
+                environ["PATH_INFO"] = "/"
+        return self.wsgi_app(environ, start_response)
+
+
+app.wsgi_app = _VercelPathFix(app.wsgi_app)
+
+
 def make_oauth(cache_handler=None):
     """Build a SpotifyOAuth helper from environment config."""
     client_id = os.getenv("SPOTIFY_CLIENT_ID")
