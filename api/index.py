@@ -292,6 +292,8 @@ def _serve_public(filename):
 
 
 @app.route("/")
+@app.route("/api/index")     # alias: if Vercel ever passes the function path
+@app.route("/api/index.py")  # alias: both with and without the .py extension
 def index():
     return _serve_public("index.html")
 
