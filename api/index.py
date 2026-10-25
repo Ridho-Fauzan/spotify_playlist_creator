@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Spotify Playlist Creator — Web App
-==================================
+Spotify Playlist Creator — Web App (Vercel entry point)
+=======================================================
 
-A small Flask web app that lets you create a playlist on your own Spotify
-account from a browser. It handles the Spotify OAuth login flow, then lets
-you build a playlist either by listing specific songs or by using
-Spotify's recommendation engine.
+Vercel auto-detects the Flask instance named `app` in this file and runs
+it as a serverless function. The rewrite in vercel.json sends *every*
+request here, so this one app serves both the HTML/JS/CSS frontend and the
+JSON API.
 
-Run:
-    python app.py
+Local development:
+    python api/index.py
 Then open http://127.0.0.1:8888 in your browser.
 
 Setup instructions are in README.md.
@@ -37,15 +37,16 @@ load_dotenv()
 # Scopes: permission to create/edit public and private playlists.
 SCOPE = "playlist-modify-public playlist-modify-private"
 
-# Frontend assets live in public/ so Vercel's CDN serves style.css and
-# app.js directly. Flask only needs to serve index.html at the root route.
-# Paths are absolute so they resolve regardless of working directory.
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-_PUBLIC_DIR = os.path.join(_BASE_DIR, "public")
+# Frontend assets live in the repo-root public/ folder. We resolve its
+# absolute path from this file (api/index.py -> ../public) so it works no
+# matter what the serverless working directory is.
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_PUBLIC_DIR = os.path.join(os.path.dirname(_THIS_DIR), "public")
 
 app = Flask(__name__)
-# Session secret just needs to be stable per-run for the login cookie.
-# On serverless (Vercel), set FLASK_SECRET_KEY so logins survive restarts.
+# Session secret just needs to be stable per deployment for the login
+# cookie. On serverless (Vercel), set FLASK_SECRET_KEY as an env var so
+# logins survive across function invocations.
 app.secret_key = os.getenv("FLASK_SECRET_KEY", uuid.uuid4().hex)
 
 
@@ -58,7 +59,7 @@ def make_oauth(cache_handler=None):
     if not client_id or not client_secret:
         raise RuntimeError(
             "Missing SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET. "
-            "Copy .env.example to .env and fill them in."
+            "Set them as environment variables (or in a local .env file)."
         )
 
     return SpotifyOAuth(
@@ -247,7 +248,9 @@ def api_create():
             unique.append(u)
 
     if not unique:
-        return jsonify({"error": "Tidak ada lagu yang bisa ditemukan.", "not_found": not_found}), 400
+        return jsonify(
+            {"error": "Tidak ada lagu yang bisa ditemukan.", "not_found": not_found}
+        ), 400
 
     user_id = sp.current_user()["id"]
     playlist = sp.user_playlist_create(
@@ -266,22 +269,25 @@ def api_create():
     )
 
 
+# --------------------------------------------------------------------------
+# Frontend (served by this same function, so nothing depends on CDN routing)
+# --------------------------------------------------------------------------
+
 @app.route("/")
 def index():
-    # Serve the single-page frontend. On Vercel, style.css/app.js are served
-    # directly by the CDN from public/; here we serve the HTML entry point.
     return send_from_directory(_PUBLIC_DIR, "index.html")
 
 
 @app.route("/style.css")
+def style_css():
+    return send_from_directory(_PUBLIC_DIR, "style.css")
+
+
 @app.route("/app.js")
-def public_asset():
-    # Fallback for local dev (`python app.py`). On Vercel these paths are
-    # served straight from the CDN and never reach Flask.
-    filename = request.path.lstrip("/")
-    return send_from_directory(_PUBLIC_DIR, filename)
+def app_js():
+    return send_from_directory(_PUBLIC_DIR, "app.js")
 
 
 if __name__ == "__main__":
-    # Port 8888 matches the redirect URI in the setup instructions.
+    # Port 8888 matches the default redirect URI in the setup instructions.
     app.run(host="127.0.0.1", port=8888, debug=True)
