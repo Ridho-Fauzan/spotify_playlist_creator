@@ -66,6 +66,17 @@ app = Flask(__name__)
 # logins survive across function invocations.
 app.secret_key = os.getenv("FLASK_SECRET_KEY", uuid.uuid4().hex)
 
+# Cookie settings for the OAuth round-trip. The redirect back from Spotify
+# to /callback is a top-level cross-site navigation, so the session cookie
+# must be allowed to travel with it. On Vercel everything is HTTPS, so we
+# mark the cookie Secure; SameSite=Lax lets it ride top-level GET redirects.
+_on_vercel = bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV"))
+app.config.update(
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=_on_vercel,   # True in production (HTTPS), False locally
+    SESSION_COOKIE_HTTPONLY=True,
+)
+
 
 class _VercelPathFix:
     """WSGI middleware: restore the original request path on Vercel.
@@ -84,23 +95,47 @@ class _VercelPathFix:
     def __init__(self, wsgi_app):
         self.wsgi_app = wsgi_app
 
+    # Header names (WSGI-style, uppercased with HTTP_ prefix) that Vercel may
+    # use to carry the visitor's original URL+path.
+    _PATH_HEADERS = (
+        "HTTP_X_FORWARDED_URI",
+        "HTTP_X_VERCEL_FORWARDED_FOR_PATH",
+        "HTTP_X_ORIGINAL_URL",
+        "HTTP_X_NOW_ROUTE_MATCHES",
+        "HTTP_X_VERCEL_PROXIED_FOR",
+    )
+
     def __call__(self, environ, start_response):
         path = environ.get("PATH_INFO", "")
         if path in self._FUNCTION_PATHS:
-            # Try the headers Vercel forwards with the original URL.
-            forwarded = (
-                environ.get("HTTP_X_FORWARDED_URI")
-                or environ.get("HTTP_X_VERCEL_FORWARDED_FOR_PATH")
-                or environ.get("HTTP_X_ORIGINAL_URL")
-                or ""
-            )
+            forwarded = ""
+            for header in self._PATH_HEADERS:
+                value = environ.get(header)
+                if value:
+                    forwarded = value
+                    break
             if forwarded:
-                # Strip any query string; Flask reads QUERY_STRING separately.
                 environ["PATH_INFO"] = forwarded.split("?", 1)[0]
             else:
-                # No header available — default to the home page rather than
-                # a confusing 404 on the function's own path.
-                environ["PATH_INFO"] = "/"
+                # Diagnostic: log every header so we can see what Vercel
+                # actually sends, then fall back to the query string's
+                # presence to guess the OAuth callback vs. home.
+                import logging
+
+                hdrs = {k: v for k, v in environ.items() if k.startswith("HTTP_")}
+                logging.getLogger("vercel-pathfix").warning(
+                    "PATH_INFO=%s, QUERY=%s, headers=%s",
+                    path,
+                    environ.get("QUERY_STRING", ""),
+                    hdrs,
+                )
+                # If there's an OAuth "code" in the query, this is the Spotify
+                # callback — route it to /callback so login completes.
+                qs = environ.get("QUERY_STRING", "")
+                if "code=" in qs or "error=" in qs:
+                    environ["PATH_INFO"] = "/callback"
+                else:
+                    environ["PATH_INFO"] = "/"
         return self.wsgi_app(environ, start_response)
 
 
