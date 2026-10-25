@@ -38,10 +38,27 @@ load_dotenv()
 SCOPE = "playlist-modify-public playlist-modify-private"
 
 # Frontend assets live in the repo-root public/ folder. We resolve its
-# absolute path from this file (api/index.py -> ../public) so it works no
-# matter what the serverless working directory is.
+# path from this file. On Vercel, includeFiles (see vercel.json) copies the
+# public/ folder into the bundle, but its exact location can vary, so we
+# check several candidate locations and fall back gracefully.
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PUBLIC_DIR = os.path.join(os.path.dirname(_THIS_DIR), "public")
+
+
+def _find_public_dir():
+    candidates = [
+        os.path.join(os.path.dirname(_THIS_DIR), "public"),  # repo-root/public
+        os.path.join(_THIS_DIR, "public"),                   # api/public
+        os.path.join(os.getcwd(), "public"),                 # cwd/public
+        "/var/task/public",                                  # Vercel bundle root
+    ]
+    for path in candidates:
+        if os.path.isdir(path):
+            return path
+    # Fall back to the first candidate; asset routes handle a miss anyway.
+    return candidates[0]
+
+
+_PUBLIC_DIR = _find_public_dir()
 
 app = Flask(__name__)
 # Session secret just needs to be stable per deployment for the login
@@ -203,39 +220,6 @@ def search_tracks(sp, queries):
     return uris, not_found
 
 
-def recommend_tracks(sp, seed_artists, seed_genres, seed_tracks, limit):
-    """Use Spotify's recommendation engine to get track URIs."""
-    artist_ids = []
-    for name in seed_artists:
-        res = sp.search(q=f"artist:{name}", type="artist", limit=1)
-        items = res.get("artists", {}).get("items", [])
-        if items:
-            artist_ids.append(items[0]["id"])
-
-    track_ids = []
-    for name in seed_tracks:
-        res = sp.search(q=name, type="track", limit=1)
-        items = res.get("tracks", {}).get("items", [])
-        if items:
-            track_ids.append(items[0]["id"])
-
-    total = len(artist_ids) + len(seed_genres) + len(track_ids)
-    if total == 0:
-        return []
-    if total > 5:
-        raise ValueError(
-            "Spotify hanya mengizinkan maksimal 5 acuan total (artis + genre + lagu)."
-        )
-
-    rec = sp.recommendations(
-        seed_artists=artist_ids or None,
-        seed_genres=list(seed_genres) or None,
-        seed_tracks=track_ids or None,
-        limit=limit,
-    )
-    return [t["uri"] for t in rec.get("tracks", [])]
-
-
 def add_in_batches(sp, playlist_id, uris):
     for i in range(0, len(uris), 100):
         sp.playlist_add_items(playlist_id, uris[i : i + 100])
@@ -259,36 +243,10 @@ def api_create():
     songs_text = data.get("songs") or ""
     queries = [line.strip() for line in songs_text.splitlines() if line.strip()]
 
-    # Recommendation seeds (comma-separated strings).
-    def split_csv(value):
-        return [s.strip() for s in (value or "").split(",") if s.strip()]
+    if not queries:
+        return jsonify({"error": "Tambahkan minimal satu lagu."}), 400
 
-    seed_artists = split_csv(data.get("seed_artists"))
-    seed_genres = split_csv(data.get("seed_genres"))
-    seed_tracks = split_csv(data.get("seed_tracks"))
-    try:
-        count = int(data.get("count") or 20)
-    except (TypeError, ValueError):
-        count = 20
-    count = max(1, min(count, 100))
-
-    using_recs = bool(seed_artists or seed_genres or seed_tracks)
-    if not queries and not using_recs:
-        return jsonify({"error": "Tambahkan beberapa lagu atau acuan rekomendasi."}), 400
-
-    uris, not_found = [], []
-    if queries:
-        found, nf = search_tracks(sp, queries)
-        uris.extend(found)
-        not_found.extend(nf)
-
-    if using_recs:
-        try:
-            uris.extend(
-                recommend_tracks(sp, seed_artists, seed_genres, seed_tracks, count)
-            )
-        except ValueError as err:
-            return jsonify({"error": str(err)}), 400
+    uris, not_found = search_tracks(sp, queries)
 
     # De-duplicate, preserve order.
     seen, unique = set(), []
@@ -323,19 +281,51 @@ def api_create():
 # Frontend (served by this same function, so nothing depends on CDN routing)
 # --------------------------------------------------------------------------
 
+_CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+}
+
+
+def _serve_public(filename):
+    """Read a file from public/ and return it with the right content type.
+
+    Reading the bytes ourselves (instead of send_from_directory) avoids a
+    hard 404->500 if the path resolution is off on serverless; we return a
+    clear message instead of crashing.
+    """
+    path = os.path.join(_PUBLIC_DIR, filename)
+    ext = os.path.splitext(filename)[1]
+    ctype = _CONTENT_TYPES.get(ext, "application/octet-stream")
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(), 200, {"Content-Type": ctype}
+    except OSError:
+        app.logger.error("Asset not found: %s (resolved public=%s)", filename, _PUBLIC_DIR)
+        if ext == ".html":
+            return (
+                "<h1>Pembuat Playlist Spotify</h1>"
+                "<p>Aset frontend gagal dimuat. Cek konfigurasi deploy.</p>",
+                500,
+                {"Content-Type": "text/html; charset=utf-8"},
+            )
+        return f"/* {filename} not found */", 404, {"Content-Type": ctype}
+
+
 @app.route("/")
 def index():
-    return send_from_directory(_PUBLIC_DIR, "index.html")
+    return _serve_public("index.html")
 
 
 @app.route("/style.css")
 def style_css():
-    return send_from_directory(_PUBLIC_DIR, "style.css")
+    return _serve_public("style.css")
 
 
 @app.route("/app.js")
 def app_js():
-    return send_from_directory(_PUBLIC_DIR, "app.js")
+    return _serve_public("app.js")
 
 
 # --------------------------------------------------------------------------
@@ -348,7 +338,7 @@ def handle_404(err):
     if request.path.startswith("/api/"):
         return jsonify({"error": "Endpoint tidak ditemukan.", "path": request.path}), 404
     # For non-API routes, fall back to serving the single-page app.
-    return send_from_directory(_PUBLIC_DIR, "index.html")
+    return _serve_public("index.html")
 
 
 @app.errorhandler(Exception)

@@ -40,10 +40,6 @@ form.addEventListener("submit", async (e) => {
     description: document.getElementById("description").value,
     public: document.getElementById("public").checked,
     songs: document.getElementById("songs").value,
-    seed_artists: document.getElementById("seed_artists").value,
-    seed_genres: document.getElementById("seed_genres").value,
-    seed_tracks: document.getElementById("seed_tracks").value,
-    count: document.getElementById("count").value,
   };
 
   submitBtn.disabled = true;
